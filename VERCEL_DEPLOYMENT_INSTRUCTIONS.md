@@ -161,15 +161,24 @@ git push -u origin main
 
 ### 4.3 Add Environment Variables
 
-**IMPORTANT:** Add your Convex URL as an environment variable:
+**IMPORTANT:** Add your Convex URL and deploy key as environment variables:
 
 1. In the Vercel project settings, scroll to **"Environment Variables"**
-2. Click **"Add"**
-3. Add:
+2. Click **"Add"** and add the following:
+
+   **First variable:**
    - **Name:** `VITE_CONVEX_URL`
    - **Value:** Your Convex URL from Step 1.2 (e.g., `https://your-project-name.convex.cloud`)
    - **Environment:** Select all (Production, Preview, Development)
-4. Click **"Save"**
+   - Click **"Save"**
+
+   **Second variable (for build):**
+   - **Name:** `CONVEX_DEPLOY_KEY`
+   - **Value:** Get this from Convex Dashboard → Settings → Deploy Keys → Create Deploy Key
+   - **Environment:** Select all (Production, Preview, Development)
+   - Click **"Save"**
+
+   **Note:** The `CONVEX_DEPLOY_KEY` is needed for `convex dev --once` to generate files during the build.
 
 ### 4.4 Deploy
 
@@ -257,6 +266,11 @@ See `BESTIARY_LOADING_INSTRUCTIONS.md` for detailed instructions.
 **Error: "VITE_CONVEX_URL is not defined"**
 - Make sure you added `VITE_CONVEX_URL` in Vercel environment variables
 - Redeploy after adding environment variables
+
+**Error: "Could not resolve ../convex/_generated/api"**
+- Make sure you added `CONVEX_DEPLOY_KEY` in Vercel environment variables
+- The build script runs `convex dev --once` which needs the deploy key
+- Redeploy after adding the deploy key
 
 ### App Doesn't Load
 
@@ -357,10 +371,11 @@ See `BESTIARY_LOADING_INSTRUCTIONS.md` for detailed instructions.
 ### Important Environment Variables
 
 **Vercel:**
-- `VITE_CONVEX_URL` = Your Convex deployment URL
+- `VITE_CONVEX_URL` = Your Convex deployment URL (e.g., `https://your-project.convex.cloud`)
+- `CONVEX_DEPLOY_KEY` = Your Convex deploy key (from Convex Dashboard → Settings → Deploy Keys)
 
 **Convex:**
-- `CONVEX_SITE_URL` = Your Vercel app URL
+- `CONVEX_SITE_URL` = Your Vercel app URL (e.g., `https://your-project.vercel.app`)
 
 ### Common Commands
 
