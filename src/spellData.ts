@@ -44,6 +44,9 @@ const allSpells: SpellData[] = (() => {
   }
 })();
 
+// Exported for any callers that need the raw list without filtering
+export const ALL_SPELLS: SpellData[] = allSpells;
+
 // Class spell lists (simplified - you can expand this)
 const classSpells: Record<string, string[]> = {
   'Wizard': [], // Wizards can learn any spell
@@ -111,12 +114,12 @@ export function getAvailableSpells(characterClass: string, characterLevel: numbe
       maxSpellLevel = 0;
     }
     
-    if (!allSpells || allSpells.length === 0) {
+    if (!ALL_SPELLS || ALL_SPELLS.length === 0) {
       console.warn('No spell data loaded');
       return [];
     }
     
-    return allSpells
+    return ALL_SPELLS
       .filter(spell => {
         if (!spell || typeof spell.level !== 'number') return false;
         // Always include cantrips (level 0), and spells up to max spell level
@@ -132,8 +135,13 @@ export function getAvailableSpells(characterClass: string, characterLevel: numbe
   }
 }
 
-export function searchSpells(query: string, characterClass: string, characterLevel: number): SpellData[] {
-  const availableSpells = getAvailableSpells(characterClass, characterLevel);
+export function searchSpells(
+  query: string,
+  characterClass: string,
+  characterLevel: number,
+  baseList?: SpellData[],
+): SpellData[] {
+  const availableSpells = baseList ?? getAvailableSpells(characterClass, characterLevel);
   
   if (!query.trim()) {
     return availableSpells;
@@ -141,13 +149,19 @@ export function searchSpells(query: string, characterClass: string, characterLev
   
   const searchTerm = query.toLowerCase();
   return availableSpells.filter(spell => 
-    spell.name.toLowerCase().includes(searchTerm) ||
-    spell.school.toLowerCase().includes(searchTerm) ||
-    (spell.entries && spell.entries.some(entry => 
-      typeof entry === 'string' 
-        ? entry.toLowerCase().includes(searchTerm)
-        : entry.entries.some(subEntry => subEntry.toLowerCase().includes(searchTerm))
-    ))
+    spell.name?.toLowerCase().includes(searchTerm) ||
+    spell.school?.toLowerCase().includes(searchTerm) ||
+    (spell.entries && spell.entries.some(entry => {
+      if (typeof entry === 'string') {
+        return entry.toLowerCase().includes(searchTerm);
+      }
+      if (entry && typeof entry === 'object' && Array.isArray(entry.entries)) {
+        return entry.entries.some(subEntry => 
+          typeof subEntry === 'string' && subEntry.toLowerCase().includes(searchTerm)
+        );
+      }
+      return false;
+    }))
   );
 }
 

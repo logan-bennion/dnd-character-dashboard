@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
@@ -11,7 +11,7 @@ type TrackerType = "counter" | "checkbox" | "progress" | "text" | "checklist";
 
 export function TrackersTab({ characterId }: TrackersTabProps) {
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingTracker, setEditingTracker] = useState<Id<"trackers"> | null>(null);
+  const [editingTrackerId, setEditingTrackerId] = useState<Id<"trackers"> | null>(null);
   
   const trackers = useQuery(api.trackers.list, { characterId }) || [];
   const addTracker = useMutation(api.trackers.add);
@@ -30,6 +30,15 @@ export function TrackersTab({ characterId }: TrackersTabProps) {
     description: "",
     type: "counter" as TrackerType,
     value: 0,
+    minValue: undefined as number | undefined,
+    maxValue: undefined as number | undefined,
+  });
+
+  const [editingDraft, setEditingDraft] = useState({
+    name: "",
+    description: "",
+    type: "counter" as TrackerType,
+    value: 0 as number | string | boolean,
     minValue: undefined as number | undefined,
     maxValue: undefined as number | undefined,
   });
@@ -70,33 +79,19 @@ export function TrackersTab({ characterId }: TrackersTabProps) {
   };
 
   const handleUpdateTracker = async (trackerId: Id<"trackers">) => {
-    const tracker = trackers.find(t => t._id === trackerId);
-    if (!tracker) return;
-    
-    let value: number | string | boolean | undefined;
-    if (newTracker.type === "checkbox") {
-      value = typeof tracker.value === "boolean" ? tracker.value : false;
-    } else if (newTracker.type === "text") {
-      value = typeof tracker.value === "string" ? tracker.value : "";
-    } else if (newTracker.type === "checklist") {
-      value = typeof tracker.value === "string" ? tracker.value : JSON.stringify([]);
-    } else {
-      value = newTracker.value;
-    }
-    
+    const value = editingDraft.value;
     await updateTracker({
       trackerId,
-      name: newTracker.name,
-      description: newTracker.description || undefined,
-      type: newTracker.type,
+      name: editingDraft.name,
+      description: editingDraft.description || undefined,
+      type: editingDraft.type,
       value,
-      minValue: newTracker.minValue,
-      maxValue: newTracker.maxValue,
+      minValue: editingDraft.minValue,
+      maxValue: editingDraft.maxValue,
     });
     
-    setEditingTracker(null);
-    setShowAddForm(false);
-    setNewTracker({
+    setEditingTrackerId(null);
+    setEditingDraft({
       name: "",
       description: "",
       type: "counter",
@@ -126,18 +121,14 @@ export function TrackersTab({ characterId }: TrackersTabProps) {
       </div>
 
       {/* Add/Edit Tracker Form */}
-      {(showAddForm || editingTracker) && (
+      {showAddForm && (
         <div className="bg-gray-800 border border-gray-700 p-3 rounded">
           <h4 className="font-semibold mb-2 text-gray-100 text-sm">
-            {editingTracker ? "Edit Tracker" : "Add New Tracker"}
+            Add New Tracker
           </h4>
           <form onSubmit={(e) => {
             e.preventDefault();
-            if (editingTracker) {
-              void handleUpdateTracker(editingTracker);
-            } else {
-              void handleAddTracker(e);
-            }
+            void handleAddTracker(e);
           }} className="space-y-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <input
@@ -226,13 +217,12 @@ export function TrackersTab({ characterId }: TrackersTabProps) {
                 type="submit"
                 className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
               >
-                {editingTracker ? "Update Tracker" : "Add Tracker"}
+                Add Tracker
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setShowAddForm(false);
-                  setEditingTracker(null);
                   setNewTracker({
                     name: "",
                     description: "",
@@ -262,15 +252,30 @@ export function TrackersTab({ characterId }: TrackersTabProps) {
             <TrackerCard
               key={tracker._id}
               tracker={tracker}
-              onEdit={() => {
-                setEditingTracker(tracker._id);
-                setNewTracker({
+              isEditing={editingTrackerId === tracker._id}
+              editDraft={editingDraft}
+              onStartEdit={() => {
+                setEditingTrackerId(tracker._id);
+                setEditingDraft({
                   name: tracker.name,
                   description: tracker.description || "",
                   type: tracker.type as TrackerType,
-                  value: typeof tracker.value === "number" ? tracker.value : 0,
+                  value: tracker.value,
                   minValue: tracker.minValue,
                   maxValue: tracker.maxValue,
+                });
+              }}
+              onChangeEditDraft={(draft) => setEditingDraft(draft)}
+              onSaveEdit={() => void handleUpdateTracker(tracker._id)}
+              onCancelEdit={() => {
+                setEditingTrackerId(null);
+                setEditingDraft({
+                  name: "",
+                  description: "",
+                  type: "counter",
+                  value: 0,
+                  minValue: undefined,
+                  maxValue: undefined,
                 });
               }}
               onRemove={() => void removeTracker({ trackerId: tracker._id })}
@@ -300,7 +305,26 @@ interface TrackerCardProps {
     minValue?: number;
     maxValue?: number;
   };
-  onEdit: () => void;
+  isEditing: boolean;
+  editDraft: {
+    name: string;
+    description?: string;
+    type: TrackerType;
+    value: number | string | boolean;
+    minValue?: number;
+    maxValue?: number;
+  };
+  onStartEdit: () => void;
+  onChangeEditDraft: (draft: {
+    name: string;
+    description?: string;
+    type: TrackerType;
+    value: number | string | boolean;
+    minValue?: number;
+    maxValue?: number;
+  }) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
   onRemove: () => void;
   onValueChange: (value: number | string | boolean) => void;
   onIncrement: () => void;
@@ -312,19 +336,216 @@ interface TrackerCardProps {
   onUpdateChecklistItem: (index: number, label: string) => void;
 }
 
-function TrackerCard({ tracker, onEdit, onRemove, onValueChange, onIncrement, onDecrement, onToggle, onAddChecklistItem, onRemoveChecklistItem, onToggleChecklistItem, onUpdateChecklistItem }: TrackerCardProps) {
+function TrackerCard({
+  tracker,
+  isEditing,
+  editDraft,
+  onStartEdit,
+  onChangeEditDraft,
+  onSaveEdit,
+  onCancelEdit,
+  onRemove,
+  onValueChange,
+  onIncrement,
+  onDecrement,
+  onToggle,
+  onAddChecklistItem,
+  onRemoveChecklistItem,
+  onToggleChecklistItem,
+  onUpdateChecklistItem,
+}: TrackerCardProps) {
+  // Keep a local draft so typing multi-digit numbers doesn't fire mutations on each key
+  const [draftNumber, setDraftNumber] = useState(
+    typeof tracker.value === "number" ? tracker.value.toString() : ""
+  );
+  const [showCustomAdjust, setShowCustomAdjust] = useState(false);
+  const [customAmount, setCustomAmount] = useState("1");
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Sync draft when server value changes
+  useEffect(() => {
+    if (typeof tracker.value === "number") {
+      setDraftNumber(tracker.value.toString());
+    } else {
+      setDraftNumber("");
+    }
+  }, [tracker.value]);
+
+  // Auto-resize text tracker editor to fit content
+  useEffect(() => {
+    if (tracker.type !== "text" || !isEditing) return;
+    const el = textAreaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [tracker.type, isEditing, editDraft.description]);
+
+  const commitDraftNumber = () => {
+    const parsed = parseInt(draftNumber, 10);
+    if (Number.isFinite(parsed)) {
+      onValueChange(parsed);
+      setDraftNumber(parsed.toString());
+    } else {
+      // Revert to last known good value
+      setDraftNumber(typeof tracker.value === "number" ? tracker.value.toString() : "");
+    }
+  };
+
+  const clampValue = (val: number) => {
+    let result = val;
+    if (tracker.minValue !== undefined) {
+      result = Math.max(result, tracker.minValue);
+    }
+    if (tracker.maxValue !== undefined) {
+      result = Math.min(result, tracker.maxValue);
+    }
+    return result;
+  };
+
+  const commitCustomAdjust = (sign: 1 | -1) => {
+    const delta = parseInt(customAmount, 10);
+    if (!Number.isFinite(delta)) {
+      return;
+    }
+    if (typeof tracker.value !== "number") return;
+    const next = clampValue(tracker.value + sign * delta);
+    onValueChange(next);
+  };
+
+  const handleDraftKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      commitDraftNumber();
+    } else if (e.key === "Escape") {
+      setDraftNumber(typeof tracker.value === "number" ? tracker.value.toString() : "");
+    }
+  };
+
+  // Inline edit form for tracker metadata (name, description, type, constraints)
+  const renderInlineEdit = () => {
+    // Text trackers edit directly in their main textarea, so skip inline editor UI
+    if (tracker.type === "text") {
+      return null;
+    }
+
+    const handleTypeChange = (type: TrackerType) => {
+      let nextValue: number | string | boolean = editDraft.value;
+      if (type === "checkbox") nextValue = typeof editDraft.value === "boolean" ? editDraft.value : false;
+      else if (type === "text") nextValue = typeof editDraft.value === "string" ? editDraft.value : "";
+      else if (type === "checklist") nextValue = typeof editDraft.value === "string" ? editDraft.value : JSON.stringify([]);
+      else nextValue = typeof editDraft.value === "number" ? editDraft.value : 0;
+
+      onChangeEditDraft({
+        ...editDraft,
+        type,
+        value: nextValue,
+      });
+    };
+
+    return (
+      <div className="space-y-2 bg-gray-900/40 border border-gray-700 rounded p-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <input
+            type="text"
+            value={editDraft.name}
+            onChange={(e) => onChangeEditDraft({ ...editDraft, name: e.target.value })}
+            className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-700 text-gray-100 text-xs placeholder-gray-400"
+            placeholder="Tracker Name"
+            required
+          />
+          <select
+            value={editDraft.type}
+            onChange={(e) => handleTypeChange(e.target.value as TrackerType)}
+            className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-700 text-gray-100 text-xs"
+            required
+          >
+            <option value="counter">Counter</option>
+            <option value="checkbox">Checkbox</option>
+            <option value="progress">Progress Bar</option>
+            <option value="text">Text/Notes</option>
+            <option value="checklist">Checklist</option>
+          </select>
+        </div>
+        <textarea
+          value={editDraft.description}
+          onChange={(e) => onChangeEditDraft({ ...editDraft, description: e.target.value })}
+          className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-700 text-gray-100 text-xs placeholder-gray-400"
+          placeholder="Description (optional)"
+          rows={2}
+        />
+        {(editDraft.type === "counter" || editDraft.type === "progress") && (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-300 mb-0.5">Value</label>
+              <input
+                type="number"
+                value={typeof editDraft.value === "number" ? editDraft.value : 0}
+                onChange={(e) => onChangeEditDraft({ ...editDraft, value: parseInt(e.target.value) || 0 })}
+                className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-700 text-gray-100 text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-300 mb-0.5">Min</label>
+              <input
+                type="number"
+                value={editDraft.minValue ?? ""}
+                onChange={(e) => onChangeEditDraft({ ...editDraft, minValue: e.target.value ? parseInt(e.target.value) : undefined })}
+                className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-700 text-gray-100 text-xs"
+                placeholder="Optional"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-300 mb-0.5">Max</label>
+              <input
+                type="number"
+                value={editDraft.maxValue ?? ""}
+                onChange={(e) => onChangeEditDraft({ ...editDraft, maxValue: e.target.value ? parseInt(e.target.value) : undefined })}
+                className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-700 text-gray-100 text-xs"
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+        )}
+        {editDraft.type === "checkbox" && (
+          <label className="inline-flex items-center space-x-2 text-xs text-gray-200">
+            <input
+              type="checkbox"
+              checked={editDraft.value === true}
+              onChange={(e) => onChangeEditDraft({ ...editDraft, value: e.target.checked })}
+              className="w-4 h-4 rounded"
+            />
+            <span>Checked</span>
+          </label>
+        )}
+        <div className="flex space-x-2">
+          <button
+            onClick={onSaveEdit}
+            className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+          >
+            Save
+          </button>
+          <button
+            onClick={onCancelEdit}
+            className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-gray-800 border border-gray-700 rounded p-2">
       <div className="flex justify-between items-start mb-1.5">
         <div className="flex-1">
           <h5 className="font-semibold text-gray-100 text-xs mb-0.5">{tracker.name}</h5>
-          {tracker.description && (
+          {tracker.description && tracker.type !== "text" && (
             <p className="text-xs text-gray-400 mb-1 whitespace-pre-wrap">{tracker.description}</p>
           )}
         </div>
         <div className="flex space-x-1">
           <button
-            onClick={onEdit}
+            onClick={onStartEdit}
             className="text-blue-400 hover:text-blue-300 text-xs"
           >
             Edit
@@ -338,6 +559,8 @@ function TrackerCard({ tracker, onEdit, onRemove, onValueChange, onIncrement, on
         </div>
       </div>
       
+      {isEditing && renderInlineEdit()}
+
       {/* Counter Type */}
       {tracker.type === "counter" && typeof tracker.value === "number" && (
         <div className="space-y-1.5">
@@ -350,8 +573,10 @@ function TrackerCard({ tracker, onEdit, onRemove, onValueChange, onIncrement, on
             </button>
             <input
               type="number"
-              value={tracker.value}
-              onChange={(e) => onValueChange(parseInt(e.target.value) || 0)}
+              value={draftNumber}
+              onChange={(e) => setDraftNumber(e.target.value)}
+              onBlur={commitDraftNumber}
+              onKeyDown={handleDraftKey}
               onWheel={(e) => {
                 e.currentTarget.blur();
                 if (e.deltaY < 0) {
@@ -371,6 +596,42 @@ function TrackerCard({ tracker, onEdit, onRemove, onValueChange, onIncrement, on
               +
             </button>
           </div>
+          <div className="flex justify-center">
+            <button
+              onClick={() => setShowCustomAdjust((prev) => !prev)}
+              className="text-xs text-blue-400 hover:text-blue-300"
+            >
+              {showCustomAdjust ? "Hide custom adjust" : "Adjust by amount"}
+            </button>
+          </div>
+          {showCustomAdjust && (
+            <div className="flex items-center space-x-1 justify-center">
+              <input
+                type="number"
+                value={customAmount}
+                onChange={(e) => setCustomAmount(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    commitCustomAdjust(1);
+                  }
+                }}
+                className="w-16 px-1.5 py-0.5 border border-gray-600 rounded bg-gray-700 text-gray-100 text-center text-xs"
+                placeholder="Amt"
+              />
+              <button
+                onClick={() => commitCustomAdjust(1)}
+                className="px-2 py-0.5 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+              >
+                + Add
+              </button>
+              <button
+                onClick={() => commitCustomAdjust(-1)}
+                className="px-2 py-0.5 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+              >
+                − Sub
+              </button>
+            </div>
+          )}
           {(tracker.minValue !== undefined || tracker.maxValue !== undefined) && (
             <div className="text-xs text-gray-500 text-center">
               {tracker.minValue !== undefined ? `Min: ${tracker.minValue}` : ""}
@@ -426,8 +687,10 @@ function TrackerCard({ tracker, onEdit, onRemove, onValueChange, onIncrement, on
           <div className="flex justify-between items-center">
             <input
               type="number"
-              value={tracker.value}
-              onChange={(e) => onValueChange(parseInt(e.target.value) || 0)}
+                value={draftNumber}
+                onChange={(e) => setDraftNumber(e.target.value)}
+                onBlur={commitDraftNumber}
+                onKeyDown={handleDraftKey}
               onWheel={(e) => {
                 e.currentTarget.blur();
                 if (e.deltaY < 0) {
@@ -451,13 +714,53 @@ function TrackerCard({ tracker, onEdit, onRemove, onValueChange, onIncrement, on
       
       {/* Text Type */}
       {tracker.type === "text" && (
-        <textarea
-          value={typeof tracker.value === "string" ? tracker.value : ""}
-          onChange={(e) => onValueChange(e.target.value)}
-          className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-700 text-gray-100 text-xs placeholder-gray-400"
-          placeholder="Enter notes..."
-          rows={3}
-        />
+        <div className="space-y-1.5">
+          {isEditing ? (
+            <>
+              <textarea
+                value={editDraft.description || ""}
+                onChange={(e) => onChangeEditDraft({ ...editDraft, description: e.target.value })}
+                ref={textAreaRef}
+                className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-700 text-gray-100 text-xs placeholder-gray-400 resize-none"
+                placeholder="Enter notes..."
+                autoFocus
+                rows={1}
+              />
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => {
+                    onSaveEdit();
+                  }}
+                  className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={onCancelEdit}
+                  className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-1">
+              <div className="min-h-[48px] whitespace-pre-wrap text-xs text-gray-200 bg-gray-800 border border-gray-700 rounded px-2 py-1">
+                {tracker.description && tracker.description.trim().length > 0
+                  ? tracker.description
+                  : "No notes yet"}
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={onStartEdit}
+                  className="text-xs text-blue-400 hover:text-blue-300"
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
       
       {/* Checklist Type */}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
@@ -35,6 +35,17 @@ export function SpellsTab({ characterId, character }: SpellsTabProps) {
     duration: "",
     description: "",
   });
+
+  // Spell reference data is loaded locally from dnd5eReferences JSON bundles
+  const availableSpells = useMemo(
+    () => getAvailableSpells(character.class, character.level),
+    [character.class, character.level],
+  );
+
+  const visibleSpells = useMemo(
+    () => searchSpells(searchQuery, character.class, character.level, availableSpells),
+    [searchQuery, character.class, character.level, availableSpells],
+  );
 
   const handleAddSpell = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +94,6 @@ export function SpellsTab({ characterId, character }: SpellsTabProps) {
     }
 
     try {
-      const availableSpells = getAvailableSpells(character.class, character.level);
       if (!availableSpells || availableSpells.length === 0) {
         console.warn('No spells available for', character.class, character.level);
         return;
@@ -100,7 +110,7 @@ export function SpellsTab({ characterId, character }: SpellsTabProps) {
     } catch (error) {
       console.error('Error loading spells:', error);
     }
-  }, [showSpellSelection, character.class, character.level]);
+  }, [showSpellSelection, character.class, character.level, availableSpells]);
 
   // Calculate spell slots based on character level and class
   const getSpellSlots = (level: number, className: string) => {
@@ -318,8 +328,6 @@ export function SpellsTab({ characterId, character }: SpellsTabProps) {
 
       {showSpellSelection && (() => {
         try {
-          const availableSpells = getAvailableSpells(character.class, character.level);
-          
           return (
             <div className="bg-gray-800 border border-gray-700 p-3 rounded">
               <div className="flex justify-between items-center mb-2">
@@ -371,7 +379,7 @@ export function SpellsTab({ characterId, character }: SpellsTabProps) {
           <div className="max-h-96 overflow-y-auto">
             {(() => {
               try {
-                const filteredSpells = searchSpells(searchQuery, character.class, character.level)
+                const filteredSpells = visibleSpells
                   .filter(spell => spell.level === selectedSpellLevel);
                 
                 if (filteredSpells.length === 0) {

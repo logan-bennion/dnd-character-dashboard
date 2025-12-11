@@ -26,7 +26,10 @@ function Content() {
   if (loggedInUser === undefined) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
       </div>
     );
   }

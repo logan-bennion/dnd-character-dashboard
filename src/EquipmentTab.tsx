@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
@@ -26,6 +26,12 @@ export function EquipmentTab({ characterId }: EquipmentTabProps) {
     weight: 0,
     description: "",
   });
+
+  // Item reference data stays client-side via dnd5eReferences JSON
+  const visibleItems = useMemo(
+    () => searchItems(searchQuery, selectedCategory),
+    [searchQuery, selectedCategory],
+  );
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,7 +197,7 @@ export function EquipmentTab({ characterId }: EquipmentTabProps) {
             
             <div className="max-h-96 overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5">
-                {searchItems(searchQuery, selectedCategory)
+                {visibleItems
                   .slice(0, 50) // Limit to first 50 results for performance
                   .map((item, index) => {
                     const formattedItem = formatItemForDisplay(item);
